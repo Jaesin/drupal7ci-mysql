@@ -1,4 +1,46 @@
-FROM juampynr/drupal7ci:php-7.3
+# This Dockerfile is a modified version of https://github.com/Lullabot/drupal7ci/blob/master/Dockerfile
+FROM php:7.4-apache
+
+COPY --from=composer:1 /usr/bin/composer /usr/bin/composer
+
+RUN a2enmod rewrite
+
+# install the PHP extensions we need
+RUN apt-get update && apt-get install -y \
+    git \
+    imagemagick \
+    libjpeg-dev \
+    libmagickwand-dev \
+    libpq-dev \
+    libonig-dev \
+    mariadb-client \
+    rsync \
+    sudo \
+    unzip \
+    vim \
+    wget \
+	&& rm -rf /var/lib/apt/lists/* \
+	&& docker-php-ext-configure gd --with-jpeg \
+	&& docker-php-ext-install bcmath gd mbstring mysqli pdo pdo_mysql pdo_pgsql
+
+WORKDIR /var/www/html
+
+# Remove the memory limit for the CLI only.
+RUN echo 'memory_limit = -1' > /usr/local/etc/php/php-cli.ini
+
+# Change docroot.
+RUN sed -ri -e 's!/var/www/html!/var/www/html/docroot!g' /etc/apache2/sites-available/*.conf
+RUN sed -ri -e 's!/var/www!/var/www/html/docroot!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
+
+# Install XDebug.
+RUN pecl install xdebug \
+    && docker-php-ext-enable xdebug
+
+# Install Dockerize.
+ENV DOCKERIZE_VERSION v0.6.0
+RUN wget https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz \
+    && tar -C /usr/local/bin -xzvf dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz \
+    && rm dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz
 
 # Install mysql 5.7.
 RUN apt update && apt install -y lsb-release gnupg wget debconf-utils \
@@ -25,12 +67,14 @@ RUN printf "#### Install PHP Extensions ####\n" \
     && apt install -y libzip-dev tini \
     && docker-php-ext-install gettext zip \
         \
-    && printf "\n#### Install Composer 1.x ####\n" \
-    && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer --1 \
-        \
     && printf "\n#### Install Composer Global Require ####\n" \
     && composer global require consolidation/cgr \
     && PATH="$(composer config -g home)/vendor/bin:$PATH" \
+        \
+    && printf "\n#### Install Drush 8 ####\n" \
+    && cgr drush/drush:"8.4.8" \
+    && ln -s /root/.composer/vendor/bin/drush /usr/local/bin/drush \
+    && composer clearcache \
         \
     && printf "\n#### Disabling XDebug ####\n" \
     && sed -i -e 's/zend_extension/\;zend_extension/g' $(php --info | grep xdebug.ini | sed 's/,*$//g') \
