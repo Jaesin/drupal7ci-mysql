@@ -1,12 +1,13 @@
 # This Dockerfile is a modified version of https://github.com/Lullabot/drupal7ci/blob/master/Dockerfile
-FROM php:7.4-apache
+# A Mysql 5.7 package does not exist for Debian 11 (bullseye).
+FROM php:7.4-apache-buster
 
 COPY --from=composer:1 /usr/bin/composer /usr/bin/composer
 
 RUN a2enmod rewrite
 
-# install the PHP extensions we need
-RUN apt-get update && apt-get install -y \
+# Install the PHP extensions we need
+RUN apt update && apt install -y \
     git \
     imagemagick \
     libjpeg-dev \
@@ -44,12 +45,12 @@ RUN wget https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSI
 
 # Install mysql 5.7.
 RUN apt update && apt install -y lsb-release gnupg wget debconf-utils \
-    && echo 'f6a7c41f04cc4fea7ade285092eea77a  mysql-apt-config_0.8.16-1_all.deb' > mysql-apt-config_0.8.16-1_all.deb.md5 \
-    && wget https://dev.mysql.com/get/mysql-apt-config_0.8.16-1_all.deb \
-    && md5sum -c mysql-apt-config_0.8.16-1_all.deb.md5 \
+    && echo 'ade43b291d4b8db2a00e292de7307745  mysql-apt-config_0.8.22-1_all.deb' > mysql-apt-config_0.8.22-1_all.deb.md5 \
+    && wget https://dev.mysql.com/get/mysql-apt-config_0.8.22-1_all.deb \
+    && md5sum -c mysql-apt-config_0.8.22-1_all.deb.md5 \
     && echo 'mysql-apt-config mysql-apt-config/repo-distro select debian'      | debconf-set-selections \
     && echo 'mysql-apt-config mysql-apt-config/select-server select mysql-5.7' | debconf-set-selections \
-    && DEBIAN_FRONTEND=noninteractive dpkg -i mysql-apt-config_0.8.16-1_all.deb \
+    && DEBIAN_FRONTEND=noninteractive dpkg -i mysql-apt-config_0.8.22-1_all.deb \
     && apt update \
     && DEBIAN_FRONTEND=noninteractive apt install -y mysql-community-client mysql-client mysql-community-server mysql-server
 
@@ -74,6 +75,10 @@ RUN printf "#### Install PHP Extensions ####\n" \
     && printf "\n#### Install Drush 8 ####\n" \
     && cgr drush/drush:"8.4.8" \
     && ln -s /root/.composer/vendor/bin/drush /usr/local/bin/drush \
+        \
+    && printf "\n#### Install PHPUnit ####\n" \
+    && cgr phpunit/phpunit:"^9.0" \
+    && ln -s /root/.composer/vendor/bin/phpunit /usr/local/bin/phpunit \
     && composer clearcache \
         \
     && printf "\n#### Disabling XDebug ####\n" \
