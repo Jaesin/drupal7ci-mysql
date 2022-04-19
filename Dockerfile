@@ -20,9 +20,11 @@ RUN apt update && apt install -y \
     unzip \
     vim \
     wget \
-	&& rm -rf /var/lib/apt/lists/* \
 	&& docker-php-ext-configure gd --with-jpeg \
-	&& docker-php-ext-install bcmath gd mbstring mysqli pdo pdo_mysql pdo_pgsql
+	&& docker-php-ext-install bcmath gd mbstring mysqli pdo pdo_mysql pdo_pgsql \
+    && pecl install redis \
+    && docker-php-ext-enable redis \
+	&& rm -rf /tmp/pear /var/lib/apt/lists/* 
 
 WORKDIR /var/www/html
 
