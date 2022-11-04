@@ -2,11 +2,11 @@
 # A Mysql 5.7 package does not exist for Debian 11 (bullseye).
 FROM php:7.4-apache-buster
 
-COPY --from=composer:1 /usr/bin/composer /usr/bin/composer
+COPY --from=composer:2.3.5 /usr/bin/composer /usr/bin/composer
 
 RUN a2enmod rewrite
 
-# Install the PHP extensions we need
+# Add requirements
 RUN apt update && apt install -y \
     git \
     imagemagick \
@@ -17,21 +17,28 @@ RUN apt update && apt install -y \
     mariadb-client \
     rsync \
     sudo \
+    gosu \
     unzip \
     vim \
     wget \
-	&& docker-php-ext-configure gd --with-jpeg \
+    libxml2-utils
+
+# Install the PHP extensions we need
+RUN docker-php-ext-configure gd --with-jpeg \
 	&& docker-php-ext-install bcmath gd mbstring mysqli pdo pdo_mysql pdo_pgsql \
     && pecl install redis \
     && docker-php-ext-enable redis \
 	&& rm -rf /tmp/pear /var/lib/apt/lists/* 
 
-WORKDIR /var/www/html
-
 # Remove the memory limit for the CLI only.
 RUN echo 'memory_limit = -1' > /usr/local/etc/php/php-cli.ini
 
 # Change docroot.
+WORKDIR /var/www/html/docroot
+RUN mkdir -p /var/www/html/docroot && touch /var/www/html/docroot/index.html
+# Make sure www-data owns the /var/www directory.
+RUN chown -R www-data:www-data /var/www
+
 RUN sed -ri -e 's!/var/www/html!/var/www/html/docroot!g' /etc/apache2/sites-available/*.conf
 RUN sed -ri -e 's!/var/www!/var/www/html/docroot!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
 
@@ -68,30 +75,32 @@ RUN service mysql start \
 RUN printf "#### Install PHP Extensions ####\n" \
     && apt update \
     && apt install -y libzip-dev tini \
-    && docker-php-ext-install gettext zip \
-        \
-    && printf "\n#### Install Composer Global Require ####\n" \
+    && docker-php-ext-install gettext zip
+
+# Copy the init file.
+COPY docker-init /usr/local/bin/
+
+USER www-data
+
+RUN printf "\n#### Install Composer Global Require ####\n" \
     && composer global require consolidation/cgr \
     && PATH="$(composer config -g home)/vendor/bin:$PATH" \
         \
     && printf "\n#### Install Drush 8 ####\n" \
     && cgr drush/drush:"8.4.8" \
-    && ln -s /root/.composer/vendor/bin/drush /usr/local/bin/drush \
         \
     && printf "\n#### Install PHPUnit ####\n" \
     && cgr phpunit/phpunit:"^9.0" \
-    && ln -s /root/.composer/vendor/bin/phpunit /usr/local/bin/phpunit \
-    && composer clearcache \
-        \
-    && printf "\n#### Disabling XDebug ####\n" \
-    && sed -i -e 's/zend_extension/\;zend_extension/g' $(php --info | grep xdebug.ini | sed 's/,*$//g') \
-        \
-    && printf "\n#### Set up Apache ####\n" \
-    && sudo -u www-data mkdir -p /var/www/html/docroot \
-    && sudo -u www-data touch /var/www/html/docroot/index.html
+    && composer clearcache
 
-# Copy the init file.
-COPY docker-init /usr/local/bin/
+USER root
+
+# Create symbolic links.
+RUN printf "\n#### Creating links for drush and phpunit ####\n" \
+    && ln -s /var/www/.composer/vendor/bin/drush /usr/local/bin/drush \
+    && ln -s /var/www/.composer/vendor/bin/phpunit /usr/local/bin/phpunit \
+    && printf "\n#### Disabling XDebug ####\n" \
+    && sed -i -e 's/zend_extension/\;zend_extension/g' $(php --info | grep xdebug.ini | sed 's/,*$//g')
 
 # Expose the default apace2 and mysql ports.
 EXPOSE 80 3306
