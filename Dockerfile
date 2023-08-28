@@ -1,8 +1,8 @@
 # This Dockerfile is a modified version of https://github.com/Lullabot/drupal7ci/blob/master/Dockerfile
 # A Mysql 5.7 package does not exist for Debian 11 (bullseye).
-FROM php:7.4-apache-buster
+FROM php:8.1-apache-buster
 
-COPY --from=composer:2.3.5 /usr/bin/composer /usr/bin/composer
+COPY --from=composer:2.5.8 /usr/bin/composer /usr/bin/composer
 
 RUN a2enmod rewrite
 
@@ -26,8 +26,8 @@ RUN apt update && apt install -y \
 # Install the PHP extensions we need
 RUN docker-php-ext-configure gd --with-jpeg \
 	&& docker-php-ext-install bcmath gd mbstring mysqli pdo pdo_mysql pdo_pgsql \
-    && pecl install redis \
-    && docker-php-ext-enable redis \
+    && pecl install redis apcu \
+    && docker-php-ext-enable redis apcu \
 	&& rm -rf /tmp/pear /var/lib/apt/lists/* 
 
 # Remove the memory limit for the CLI only.
@@ -43,7 +43,7 @@ RUN sed -ri -e 's!/var/www/html!/var/www/html/docroot!g' /etc/apache2/sites-avai
 RUN sed -ri -e 's!/var/www!/var/www/html/docroot!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
 
 # Install XDebug.
-RUN pecl install xdebug \
+RUN pecl install xdebug-3.2.2 \
     && docker-php-ext-enable xdebug
 
 # Install Dockerize.
@@ -82,15 +82,11 @@ COPY docker-init /usr/local/bin/
 
 USER www-data
 
-RUN printf "\n#### Install Composer Global Require ####\n" \
-    && composer global require consolidation/cgr \
-    && PATH="$(composer config -g home)/vendor/bin:$PATH" \
-        \
-    && printf "\n#### Install Drush 8 ####\n" \
-    && cgr drush/drush:"8.4.8" \
+RUN printf "\n#### Install Drush 8 ####\n" \
+    && composer global require drush/drush:"8.4.11" \
         \
     && printf "\n#### Install PHPUnit ####\n" \
-    && cgr phpunit/phpunit:"^9.0" \
+    && composer global require phpunit/phpunit:"^9.0" \
     && composer clearcache
 
 USER root
